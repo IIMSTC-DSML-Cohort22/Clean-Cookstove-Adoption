@@ -62,3 +62,73 @@ def clean_data(input_path="Data/india_cookstove_survey_2000.csv", output_dir="Da
         drop_first=True,
         dtype=int
     )
+    # Step 6 - Check Multicollinearity (Optional Output here)
+    # Note: the prompt just showed seaborn heatmap, but we'll print highly correlated pairs for CLI usage.
+    numeric_features = [
+        "income_inr_month", "household_size", "education_level",
+        "monthly_fuel_cost_inr", "fuel_access_score", "distance_to_market_km",
+        "awareness_score", "cook_hours_per_day", "health_concern_score",
+        "number_of_children_under5"
+    ]
+    corr_matrix = df[numeric_features].corr().abs()
+    upper = corr_matrix.where(np.triu(np.ones(corr_matrix.shape), k=1).astype(bool))
+    high_corr = [(upper.columns[x], upper.index[y]) for x, y in zip(*np.where(upper > 0.85))]
+    if high_corr:
+        print("WARNING: Highly correlated features found (r > 0.85):", high_corr)
+
+    # Step 7 - Train / Test Split (Before Scaling)
+    print("Splitting and Scaling data...")
+    X = df.drop(columns=["adoption_label"])
+    y = df["adoption_label"]
+
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y,
+        test_size=0.2,
+        random_state=42,
+        stratify=y      
+    )
+
+    # Step 5 & 7 continued - Feature Scaling with StandardScaler
+    scale_cols = [
+        "income_inr_month",
+        "household_size",
+        "education_level",
+        "monthly_fuel_cost_inr",
+        "fuel_access_score",
+        "distance_to_market_km",
+        "awareness_score",
+        "cook_hours_per_day",
+        "health_concern_score",
+        "number_of_children_under5"
+    ]
+
+    scaler = StandardScaler()
+    X_train[scale_cols] = scaler.fit_transform(X_train[scale_cols])
+    X_test[scale_cols] = scaler.transform(X_test[scale_cols])
+
+    print(f"Train size: {X_train.shape}")
+    print(f"Test size:  {X_test.shape}")
+    
+    # Step 8 - Handle Class Imbalance (Check balance)
+    print("Training set class balance:\n", y_train.value_counts(normalize=True))
+
+    # Step 9 - Final Validation Checks
+    assert X_train.isnull().sum().sum() == 0,  "Nulls in train set"
+    assert X_test.isnull().sum().sum() == 0,   "Nulls in test set"
+    assert np.isinf(X_train.values).sum() == 0, "Infinite values in train set"
+    assert all(X_train.dtypes != "object"),    "Non-numeric columns remain"
+    assert set(y.unique()) == {0, 1},          "Target is not binary"
+
+    print("All checks passed. Ready for logistic regression.")
+
+    # Step 10 - Save Cleaned Data
+    os.makedirs(output_dir, exist_ok=True)
+    X_train.to_csv(os.path.join(output_dir, "X_train_clean.csv"), index=False)
+    X_test.to_csv(os.path.join(output_dir, "X_test_clean.csv"), index=False)
+    y_train.to_csv(os.path.join(output_dir, "y_train.csv"), index=False)
+    y_test.to_csv(os.path.join(output_dir, "y_test.csv"), index=False)
+
+    print(f"Cleaned datasets saved in '{output_dir}'.")
+
+if __name__ == "__main__":
+    clean_data()
