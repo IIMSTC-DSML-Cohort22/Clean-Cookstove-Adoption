@@ -111,3 +111,72 @@ def evaluate_roc(
     plt.savefig(os.path.join(output_dir, "threshold_analysis.png"), dpi=150, bbox_inches="tight")
     plt.close()
     print(f"Threshold Analysis saved → plots/threshold_analysis.png  |  Best F1 Threshold = {best_f1_thresh:.2f}")
+    # ── 3. ROC Curve by Zone (regional deployment evaluation) ─────────────────
+    print("Plotting ROC Curve by Zone...")
+    zone_cols = [c for c in df.columns if c.startswith("zone_")]
+
+    fig, ax = plt.subplots(figsize=(9, 6))
+    zone_colors = ["#e74c3c", "#3498db", "#2ecc71", "#f39c12", "#9b59b6"]
+    zone_aucs   = {}
+
+    # Reconstruct zone label from one-hot columns
+    def get_zone(row):
+        for col in zone_cols:
+            if row[col] == 1:
+                return col.replace("zone_", "")
+        return "Central"   # dropped reference category
+
+    df["zone_label"] = df.apply(get_zone, axis=1)
+
+    for i, zone in enumerate(sorted(df["zone_label"].unique())):
+        mask     = df["zone_label"] == zone
+        if mask.sum() < 10:
+            continue
+        z_fpr, z_tpr, _ = roc_curve(y_test[mask], y_pred_proba[mask])
+        z_auc            = roc_auc_score(y_test[mask], y_pred_proba[mask])
+        zone_aucs[zone]  = round(z_auc, 4)
+        ax.plot(z_fpr, z_tpr, lw=2, color=zone_colors[i % len(zone_colors)],
+                label=f"{zone} (AUC = {z_auc:.3f})")
+
+    ax.plot([0, 1], [0, 1], color="grey", lw=1, linestyle="--")
+    ax.set_xlabel("False Positive Rate", fontsize=12)
+    ax.set_ylabel("True Positive Rate", fontsize=12)
+    ax.set_title("ROC Curve by Zone\nRegional Deployment Strategy Evaluation", fontsize=13)
+    ax.legend(loc="lower right", fontsize=9)
+    ax.set_xlim([0, 1])
+    ax.set_ylim([0, 1.02])
+    plt.tight_layout()
+    plt.savefig(os.path.join(output_dir, "roc_by_zone.png"), dpi=150, bbox_inches="tight")
+    plt.close()
+    print("ROC by Zone saved → plots/roc_by_zone.png")
+
+    # ── 4. Summary Report ─────────────────────────────────────────────────────
+    print("\n" + "=" * 55)
+    print("       ROC EVALUATION SUMMARY")
+    print("=" * 55)
+    print(f"  Overall AUC          : {auc_score:.4f}")
+    print(f"  Default Threshold    : 0.50")
+    print(f"  Optimal Threshold    : {optimal_thresh:.4f}  (Youden's J)")
+    print(f"  Best F1 Threshold    : {best_f1_thresh:.2f}")
+    print("\n  AUC by Zone:")
+    for zone, auc in sorted(zone_aucs.items(), key=lambda x: -x[1]):
+        print(f"    {zone:<12} : {auc}")
+
+    print("\n  Classification at Default Threshold (0.50):")
+    print(classification_report(y_test, y_pred, target_names=["Unlikely", "Likely"]))
+
+    print("\n  Classification at Optimal Threshold:")
+    y_optimal = (y_pred_proba >= optimal_thresh).astype(int)
+    print(classification_report(y_test, y_optimal, target_names=["Unlikely", "Likely"]))
+    print("=" * 55)
+
+    # Save zone AUC summary
+    os.makedirs("Data/roc", exist_ok=True)
+    zone_auc_df = pd.DataFrame(
+        list(zone_aucs.items()), columns=["zone", "auc_score"]
+    ).sort_values("auc_score", ascending=False)
+    zone_auc_df.to_csv("Data/roc/zone_auc_summary.csv", index=False)
+    print("\nZone AUC summary saved → Data/roc/zone_auc_summary.csv")
+
+if __name__ == "__main__":
+    evaluate_roc()
