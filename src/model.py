@@ -64,3 +64,77 @@ def run_model():
     )
     model.fit(X_train, y_train)
     print("Model training complete.")
+    
+        # Step 4 - Evaluate on Test Set
+    print("\nEvaluating model on test set...")
+    y_pred       = model.predict(X_test)
+    y_pred_proba = model.predict_proba(X_test)[:, 1]
+
+    print("\nClassification Report:")
+    print(classification_report(y_test, y_pred, target_names=["Unlikely", "Likely"]))
+
+    auc = roc_auc_score(y_test, y_pred_proba)
+    print(f"ROC-AUC Score: {auc:.4f}")
+
+    # Step 5 - Confusion Matrix Plot
+    cm = confusion_matrix(y_test, y_pred)
+    disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=["Unlikely", "Likely"])
+    disp.plot(cmap="Blues")
+    plt.title("Confusion Matrix — Logistic Regression")
+    plt.savefig("plots/model/confusion_matrix.png", bbox_inches="tight")
+    plt.close()
+    print("Confusion matrix saved to plots/model/confusion_matrix.png")
+
+    # Step 6 - Feature Importance (Coefficients)
+    coef_df = pd.DataFrame({
+        "feature":     X_train.columns,
+        "coefficient": model.coef_[0]
+    }).sort_values("coefficient", ascending=False)
+
+    print("\nTop 10 features driving Likely Adoption:")
+    print(coef_df.head(10).to_string(index=False))
+
+    print("\nTop 10 features driving Unlikely Adoption:")
+    print(coef_df.tail(10).to_string(index=False))
+
+    plt.figure(figsize=(10, 8))
+    top20  = pd.concat([coef_df.head(10), coef_df.tail(10)])
+    colors = ["#2ecc71" if c > 0 else "#e74c3c" for c in top20["coefficient"]]
+    plt.barh(top20["feature"], top20["coefficient"], color=colors)
+    plt.axvline(0, color="black", linewidth=0.8)
+    plt.title("Top 20 Logistic Regression Coefficients")
+    plt.xlabel("Coefficient Value")
+    plt.tight_layout()
+    plt.savefig("plots/model/feature_coefficients.png", bbox_inches="tight")
+    plt.close()
+    print("Feature coefficients plot saved to plots/model/feature_coefficients.png")
+
+    # Step 7 - Save Model and Predictions
+    joblib.dump(model, "Data/model/logistic_regression_model.pkl")
+    print("Model saved to Data/model/logistic_regression_model.pkl")
+
+    results_df = X_test.copy()
+    results_df["actual_label"]         = y_test.values
+    results_df["predicted_label"]      = y_pred
+    results_df["adoption_probability"] = y_pred_proba
+
+    results_df.to_csv("Data/model/predictions.csv", index=False)
+    print("Predictions saved to Data/model/predictions.csv")
+
+    # Step 8 - Save Metrics Summary
+    metrics = {
+        "accuracy":  round(accuracy_score(y_test, y_pred), 4),
+        "precision": round(precision_score(y_test, y_pred), 4),
+        "recall":    round(recall_score(y_test, y_pred), 4),
+        "f1_score":  round(f1_score(y_test, y_pred), 4),
+        "roc_auc":   round(auc, 4)
+    }
+
+    metrics_df = pd.DataFrame([metrics])
+    metrics_df.to_csv("Data/model/model_metrics.csv", index=False)
+    print("\nMetrics Summary:")
+    print(metrics_df.to_string(index=False))
+    print("Metrics saved to Data/model/model_metrics.csv")
+
+if _name_ == "_main_":
+    run_model()
